@@ -5,8 +5,7 @@ the player's age, age difference from the opponent, and result.
 
 ## Installation
 
-Requires Python 3.10 or later. Replace OWNER and REPO with the GitHub repository
-owner and name.
+Requires Python 3.10 or later. python -m pip install git+https://github.com/UCB-stat159-f26/hw03-3-yushihan1111.git
 
 ```bash
 python -m pip install git+https://github.com/OWNER/REPO.git
@@ -57,7 +56,9 @@ retain the relevant columns from the examples supplied in the assignment.
 
 ## Personal reflections
 
-Draft for the student to revise before submitting.
+The number I remember most from this assignment is −4.68. It is the age difference in Serena's first match in the dataset, against Anne Miller. I can check the sign without looking at the code: Serena was younger, so the number should be negative. That small check helped me understand what each point in the plot actually means.
+
+In HW2, I only had to make the code work for Serena. When I moved on to Nadal, I found that the same column meant something different. Serena's file gives the opponent's birth date, so I have to calculate the opponent's age on the match date. Nadal's file already gives the opponent's age. Once both formats produce the same columns, I can use one plotting function for both players. I was glad to see that all 1,038 Serena matches still lined up with my HW2 data after that change. Comparing the rows gave me more confidence than just seeing a familiar-looking plot.
 
 The opponent-age column was the most instructive part of this assignment.
 In the women's sample, the value is a birth date that needs to be compared
