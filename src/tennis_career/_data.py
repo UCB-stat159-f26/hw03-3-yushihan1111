@@ -1,63 +1,63 @@
 """Name lookup, career data retrieval, and match cleaning."""
 
-import csv
 import json
 import re
 import unicodedata
-from functools import lru_cache
-from io import StringIO
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import urlopen
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import pandas as pd
 
-_PLAYER_URL = "https://raw.githubusercontent.com/JeffSackmann/tennis_{tour}/master/{tour}_players.csv"
+_PROFILE_URL = "https://www.tennisabstract.com/cgi-bin/{page}.cgi?{query}"
 _CAREER_URL = "https://www.tennisabstract.com/jsmatches/{slug}Career.js"
 _DAYS_PER_YEAR = 365.2425
 
 
 def _download(url):
-    with urlopen(url, timeout=30) as response:
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(request, timeout=30) as response:
         return response.read().decode("utf-8-sig", errors="replace")
 
 
-def _name_key(name):
+def _player_slug(name):
+    if not isinstance(name, str):
+        return ""
     ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]", "", ascii_name.casefold())
+    words = re.findall(r"[A-Za-z0-9]+", ascii_name)
+    return "".join(word[0].upper() + (word[1:].lower() if word.isupper() else word[1:])
+                   for word in words)
 
 
-@lru_cache(maxsize=2)
-def _player_index(tour):
-    records = csv.DictReader(StringIO(_download(_PLAYER_URL.format(tour=tour))))
-    index = {}
-    for row in records:
-        name = f"{row['name_first']} {row['name_last']}".strip()
-        if re.fullmatch(r"\d{8}", row["dob"] or ""):
-            index.setdefault(_name_key(name), set()).add((name, row["dob"]))
-    return index
+def _profile_birth_date(page, slug):
+    try:
+        profile = _download(_PROFILE_URL.format(page=page, query=urlencode({"p": slug})))
+    except HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    match = re.search(r"(?m)^\s*var dob\s*=\s*['\"]?(\d{8})\b", profile)
+    return match[1] if match else None
 
 
 def _resolve_player(name):
-    key = _name_key(name) if isinstance(name, str) else ""
-    if not key:
+    slug = _player_slug(name)
+    if not slug:
         raise ValueError("Enter a player's full name, such as 'Serena Williams'.")
-    matches = _player_index("wta").get(key, set()) | _player_index("atp").get(key, set())
-    if not matches:
-        raise ValueError(f"Player {name!r} was not found. Check the spelling and use their full name.")
-    if len(matches) > 1:
-        raise ValueError(f"Player name {name!r} matches multiple records.")
-    return next(iter(matches))
+    for page in ("player", "wplayer"):
+        birth_date = _profile_birth_date(page, slug)
+        if birth_date:
+            display_name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", slug)
+            return slug, display_name, birth_date
+    raise ValueError(f"Player {name!r} was not found. Check the spelling and use their full name.")
 
 
-def _career_script(name):
-    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
-    slug = quote(re.sub(r"[^A-Za-z0-9]", "", ascii_name))
+def _career_script(slug):
     try:
         return _download(_CAREER_URL.format(slug=slug))
     except HTTPError as error:
         if error.code == 404:
-            raise ValueError(f"Tennis Abstract has no career file for {name!r}.") from error
+            raise ValueError(f"Tennis Abstract has no career file for {slug!r}.") from error
         raise
 
 
@@ -80,14 +80,19 @@ def _opponent_ages(raw, match_dates):
     return ages_from_dates.where(birth_date, ages_from_numbers)
 
 
-def _clean_matches(rows, name, birth_date):
+def _match_frame(rows, name):
     records = [(row[0], row[1], row[4], row[11], row[16]) for row in rows]
     matches = pd.DataFrame(records, columns=["match_date", "tournament", "result",
                                              "opponent", "opponent_age"])
     matches["match_date"] = pd.to_datetime(matches["match_date"], format="%Y%m%d", errors="coerce")
     matches["player"] = name
-    matches["player_age"] = (matches["match_date"] - pd.to_datetime(birth_date, format="%Y%m%d")).dt.days
-    matches["player_age"] /= _DAYS_PER_YEAR
+    return matches
+
+
+def _clean_matches(rows, name, birth_date):
+    matches = _match_frame(rows, name)
+    player_birth_date = pd.to_datetime(birth_date, format="%Y%m%d")
+    matches["player_age"] = (matches["match_date"] - player_birth_date).dt.days / _DAYS_PER_YEAR
     matches["opponent_age"] = _opponent_ages(matches["opponent_age"].astype("string"),
                                              matches["match_date"])
     matches = matches.loc[matches["result"].isin(["W", "L"]) &
@@ -100,8 +105,8 @@ def _clean_matches(rows, name, birth_date):
 def get_career_matches(player_name: str) -> pd.DataFrame:
     """Return plottable career matches with both ages in decimal years."""
     try:
-        name, birth_date = _resolve_player(player_name)
-        rows = _parse_matches(_career_script(name))
+        slug, name, birth_date = _resolve_player(player_name)
+        rows = _parse_matches(_career_script(slug))
     except (URLError, TimeoutError) as error:
         raise ConnectionError("Could not download player data. Check your connection and try again.") from error
     matches = _clean_matches(rows, name, birth_date)

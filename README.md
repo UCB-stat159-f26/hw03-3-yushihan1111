@@ -32,19 +32,17 @@ plt.show()
 # get_career_matches("GastonSanchez") raises ValueError with the supplied name.
 ```
 
-`get_career_matches` accepts names regardless of capitalization or spaces.
+`get_career_matches` accepts spaced names and compact names such as `SerenaWilliams`.
 The result is a pandas DataFrame with match date, tournament, opponent, player,
 result (`W` or `L`), player age, opponent age, and age difference. Age difference
 is player age minus opponent age, so points above zero indicate an older player.
 Dates are converted to decimal ages using 365.2425 days per year. Matches with
 unusable dates, ages, or outcomes are omitted.
 
-Match data come from [Tennis Abstract](https://www.tennisabstract.com/).
-Player names and birth dates come from Jeff Sackmann's
-[WTA](https://github.com/JeffSackmann/tennis_wta) and
-[ATP](https://github.com/JeffSackmann/tennis_atp) player tables. Retrieving a
-career requires access to both data sources. A player needs a known birth
-date and a corresponding Tennis Abstract career file.
+Match data and player birth dates come from
+[Tennis Abstract](https://www.tennisabstract.com/). Retrieving a career requires
+network access and a player profile with a birth date and a career match file.
+Use spaces when typing an entirely lowercase name.
 
 ## Offline tests
 

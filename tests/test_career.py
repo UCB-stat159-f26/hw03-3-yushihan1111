@@ -18,18 +18,17 @@ _FIXTURES = Path(__file__).with_name("fixtures")
 
 def _offline_download(url):
     filename = url.rsplit("/", 1)[-1]
-    header = "name_first,name_last,dob\n"
-    if filename == "wta_players.csv":
-        return header + "Serena,Williams,19810926\n"
-    if filename == "atp_players.csv":
-        return header + "Rafael,Nadal,19860603\n"
+    profiles = {
+        "wplayer.cgi?p=SerenaWilliams": "var dob = 19810926;",
+        "player.cgi?p=RafaelNadal": "var dob = 19860603;",
+    }
+    if ".cgi?" in filename:
+        return profiles.get(filename, "")
     return (_FIXTURES / filename).read_text(encoding="utf-8")
 
 
 class CareerTests(TestCase):
     def setUp(self):
-        _data._player_index.cache_clear()
-        self.addCleanup(_data._player_index.cache_clear)
         self.addCleanup(plt.close, "all")
         mock = patch.object(_data, "_download", side_effect=_offline_download)
         mock.start()
